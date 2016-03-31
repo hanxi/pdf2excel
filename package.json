@@ -1,0 +1,19 @@
+{
+  "name": "pdf2excel",
+  "version": "1.0.0",
+  "description": "pdf to excel",
+  "main": "pdf2excel",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "pdf",
+    "excel"
+  ],
+  "author": "hanxi",
+  "license": "MIT",
+  "dependencies": {
+    "request": "^2.69.0",
+    "yargs": "^4.3.2"
+  }
+}

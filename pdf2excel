@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+
+var request = require('request');
+var fs = require('fs');
+
+var argv = require('yargs')
+  .option('i', {
+    alias: 'in',
+    demand: true,
+    describe: 'input pdf file directory',
+    type: 'string'
+  })
+  .option('o', {
+    alias: 'out',
+    demand: true,
+    describe: 'output excel file directory',
+    type: 'string'
+  })
+  .usage('Usage: pdf2excel [options]')
+  .example('pdf2excel -i pdfdir -o exceldir')
+  .help('h')
+  .alias('h', 'help')
+  .epilog('copyright 2016')
+  .argv;
+
+console.log('in: ', argv.i);
+console.log('out: ', argv.o);
+
+inputDir = argv.i;
+outputDir = argv.o;
+if (inputDir.substr(-1, 1) != '/') {
+  inputDir += '/';
+}
+if (outputDir.substr(-1, 1) != '/') {
+  outputDir += '/';
+}
+
+g_files = [];
+
+fileList = fs.readdirSync(inputDir);
+console.log(fileList);
+for (var i = 0; i < fileList.length; i++) {
+  var fileName = fileList[i];
+  console.log(fileName);
+  if (fileName.substr(0, 1) !== '.') {
+    g_files.push({
+      "name": fileName,
+      "path": inputDir + fileName
+    });
+  }
+}
+upload();
+
+function generateFileName(t) {
+  for (var e = "", n = t ? (t.match(/(\.[^\.]+$)/) || [])[1] || "" : "", r = 0; 8 >
+    r; r++)
+    e += (65536 * (1 + Math.random()) | 0).toString(16).substring(1);
+  return e.toLowerCase() + n;
+}
+
+function upload() {
+  var file = g_files.pop();
+  if (!file) {
+    console.log('no file');
+    return;
+  }
+  console.log(file);
+  var serverId = Math.ceil(Math.random() * 5);
+  var fileServer = 'https://files' + serverId + '.smallpdf.com';
+  request(fileServer + '/heartbeat', function(err, res, body) {
+    if (!err) {
+      console.log("heartbeat1:", body);
+      var taskServerId = Math.ceil(Math.random() * 2);
+      var queueServer = 'https://queue' + taskServerId + '.smallpdf.com';
+      request(queueServer + '/heartbeat', function(err, res, body) {
+        if (!err) {
+          console.log("heartbeat2:", body);
+          var tmpFileName = generateFileName(file.name);
+          var url = fileServer + '/files/' + tmpFileName;
+          fs.createReadStream(file.path).pipe(request.post(url,
+            function(err, res, body) {
+              if (!err) {
+                console.log("upload:", body);
+                var url = queueServer + '/tasks';
+                var taskId = generateFileName();
+                var data = {
+                  "type": "pdf-to-excel",
+                  "input_files": [tmpFileName],
+                  "file_server": fileServer,
+                  "task_id": taskId
+                };
+                request.post(url, {
+                  body: JSON.stringify(data)
+                }, function(err, res, body) {
+                  console.log("tasks:", body);
+                  var url = queueServer + '/tasks/' + taskId;
+                  request(url, function(err, res, body) {
+                    console.log("task_id:", body);
+                    var excelName = file.name.replace(
+                      /pdf$/, 'xlsx');
+                    var durl = fileServer + '/files/' +
+                      tmpFileName + '.xlsx?name=' +
+                      excelName;
+                    console.log("download:", durl);
+                    request(durl).pipe(fs.createWriteStream(
+                      outputDir + excelName))
+                    upload();
+                  });
+                });
+              } else {
+                console.error(err);
+              }
+            }));
+        } else {
+          console.error(err);
+        }
+      });
+    } else {
+      console.error(err, res, body);
+    }
+  });
+}
